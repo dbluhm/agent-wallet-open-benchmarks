@@ -1,8 +1,7 @@
 import asyncio
 from functools import reduce
 import json
-import random
-import string
+from secrets import token_hex
 import time
 from enum import Enum
 from indy import wallet, error
@@ -19,20 +18,22 @@ class KeyDerivationMethod(Enum):
     raw = "RAW"
 
 
-async def create():
-    key = ''.join(
-        random.SystemRandom().choice(
-            string.ascii_letters + string.digits
-        ) for _ in range(KEY_LENGTH)
-    )
+async def create(raw: bool = True):
+    if raw:
+        key = await wallet.generate_wallet_key("{}")
+        derivation_method = KeyDerivationMethod.raw
+    else:
+        key = token_hex(16)
+        derivation_method = KeyDerivationMethod.argon
+
     config = {
-        "id": key,
-        "key_derivation_method": KeyDerivationMethod.argon.value,
+        "id": token_hex(8),
         "storage_type": "postgres_storage",
         "storage_config": {"url":"db:5432"}
     }
     credentials = {
         "key": key,
+        "key_derivation_method": derivation_method.value,
         "storage_credentials": {
             "account": "postgres",
             "password": "development",
@@ -68,14 +69,13 @@ async def load_postgres():
   stg_lib = cdll.LoadLibrary("libindystrgpostgres" + file_ext())
   result = stg_lib.postgresstorage_init()
 
-async def main():
-    await load_postgres()
 
+async def test(iterations: int, raw: bool = True):
     begin = time.time()
 
     times = []
-    for _ in range(100):
-        res = await create()
+    for _ in range(iterations):
+        res = await create(raw=raw)
         times.append(res)
 
 
@@ -84,6 +84,14 @@ async def main():
     print("Average create:", reduce(lambda acc, val: acc + val[0], times, 0) / len(times))
     print("Average open:", reduce(lambda acc, val: acc + val[1], times, 0) / len(times))
     print("Average create + open:", reduce(lambda acc, val: acc + val[0] + val[1], times, 0) / len(times))
+
+
+async def main():
+    await load_postgres()
+    print("== Raw ==")
+    await test(100, raw=True)
+    print("== Derived ==")
+    await test(100, raw=False)
 
 
 

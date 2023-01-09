@@ -34,10 +34,14 @@ async def create(name: str, key: str, method: KeyDerivationMethod):
         store = await Store.provision(f"{REPO_URI}{name}", method.value, key)
         create_time = time.time() - create_time
         await store.close()
+        open_time = time.time()
+        store = await Store.open(f"{REPO_URI}{name}", method.value, key)
+        open_time = time.time() - open_time
+        await store.close()
     except Exception as err:
         print(err)
         raise
-    return create_time
+    return create_time, open_time
 
 
 async def create_raw(name: str):
@@ -60,12 +64,14 @@ async def time_creation(header: str, create_method: Callable, iterations: int):
     end = time.time()
     print(header)
     print("Total:",end-begin)
-    print("Average:", reduce(lambda acc, val: acc + val, times, 0) / len(times))
+    print("Average create:", reduce(lambda acc, val: acc + val[0], times, 0) / len(times))
+    print("Average open:", reduce(lambda acc, val: acc + val[1], times, 0) / len(times))
+    print("Average create + open:", reduce(lambda acc, val: acc + val[0] + val[1], times, 0) / len(times))
 
 
 async def main():
-    await time_creation("Raw", create_raw, 10)
-    await time_creation("Argon2i Mod", create_argon, 10)
+    await time_creation("Raw", create_raw, 100)
+    await time_creation("Argon2i Mod", create_argon, 100)
 
 
 if __name__ == "__main__":
